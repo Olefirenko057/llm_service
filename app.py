@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from services import mq_listener, file_processor, chunk_manager, llm_api
+from services import file_processor, chunk_manager, llm_api, mq_listener
 from database.mongo_handler import MongoHandler
 from utils.validation import validate_message
 import json
@@ -10,29 +10,35 @@ load_dotenv()
 
 app = Flask(__name__)
 db_handler = MongoHandler(uri=os.getenv("MONGO_URI"), db_name=os.getenv("DB_NAME"))
+video_extensions = [".mp4", ".mkv", ".avi", ".mov", ".flv"]
 
 # Handles files (PDF or video), initiates text extraction, and stores chunks in the database.
 def process_incoming_message(message):
+    print("received message: ")
+    print(message)
+    result = json.dumps(message)
     try:
-        data = validate_message(message)
+        data = validate_message(result)
         if not data:
             print("Invalid message format")
             return
-        
-        file_path = data("filePath")
-        lesson_id = data("lessonId")
 
-        if file_path.endsWith(".pdf"):
+        file_path = data["filePath"]
+        lesson_id = data["lessonId"]
+
+
+        if file_path.endswith(".pdf"):
             text = file_processor.process_pdf(file_path)
-        elif file_path.endsWith(".mp4"):
-            text = file_processor.process_video(file_path)   
+        elif any(file_path.lower().endswith(ext) for ext in video_extensions):
+            print("processing video")
+            text = file_processor.process_video(file_path)
         else:
-            print("Unsupported file type")    
+            print("Unsupported file type")
             return
-    
+
         if not text:
             print("File processing failed")
-    
+
         chunks = chunk_manager.split_text_into_chunks(text)
         db_handler.insert_lesson_chunks(lesson_id, chunks)
         print(f"Chunks stored for lesson {lesson_id}")
@@ -41,7 +47,7 @@ def process_incoming_message(message):
 
 
 mq_conn = mq_listener.start_listener(
-    ACTIVE_MQ_URL=os.getenv("ACTIVE_MQ_URL"), 
+    ACTIVE_MQ_URL=os.getenv("ACTIVE_MQ_URL"),
     queue=os.getenv("LESSON_QUEUE"),
     process_callback=process_incoming_message
     )
@@ -53,6 +59,7 @@ def ask_question():
     data = request.get_json()
     lesson_id = data.get("lesson_id")
     question = data.get("question")
+    print("question received: " + question)
 
     if not lesson_id or not question:
         return jsonify({"error": "lesson_id and question are required"}), 400
@@ -64,9 +71,10 @@ def ask_question():
     context = " ".join(chunks)
     if len(context.split()) > 2000: #Limit context to approx. 2000 tokens
         context = " ".join(context.split()[:2000])
-
+    print("context: ", context)
     try:
         answer = llm_api.get_response_from_llm(context,question)
+        print("answer: " + answer)
         return jsonify({"answer":answer})
     except Exception as e:
         print(f"Error generating LLM response: {e}")
