@@ -1,8 +1,8 @@
-Flask  # Web framework for building APIs.
-pymongo # MongoDB driver for data storage/retrieval.
+Flask~=3.1.0
+pymongo~=4.10.1
 stomp.py # Messaging library for ActiveMQ integration.
-nltk # Text processing for tokenization.
-openai # Access OpenAI GPT APIs.
-langchain-community # Tools for LLM-based applications.
-whisper # Speech-to-text transcription.
-python-dotenv  # Manage environment variables securely.
+nltk~=3.9.1
+openai~=1.58.1
+langchain-community~=0.3.13
+whisper~=1.1.10
+python-dotenv~=1.0.1
